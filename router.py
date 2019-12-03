@@ -87,7 +87,7 @@ if __name__ == "__main__":
 
 
 	while True:
-		data = "Destination: B, data = Hello"
+		data = "Destination: C, data = Hello"
 		#data, senderAddress = inputInterface.recvfrom(4096)
 		destination, message = decodePacket(data)
 

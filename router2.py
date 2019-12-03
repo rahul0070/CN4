@@ -97,6 +97,6 @@ if __name__ == "__main__":
 		print(destination, nextHop, message)
 		nextIp = getIp(nextHop)
 		nextPort = getPort(nextHop)
-		interface1.sendto(data.encode(), (nextIp,nextPort))
+		interface1.sendto(data, (nextIp,nextPort))
 
 	print('Message recieved')
