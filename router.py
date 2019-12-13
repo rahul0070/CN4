@@ -2,6 +2,7 @@ import socket
 import sqlite3
 import topology as tp
 from activateRouter import Activate
+import sys
 
 class RoutingTable:
 	def __init__(self, routerName):
@@ -47,11 +48,6 @@ def getConnectedRouters(routerName):
 
 def getIpData(routerName):
 	routerList = getConnectedRouters(routerName)
-	result = [['B', '127.0.0.1', '10001'],
-			['F', '127.0.0.1', '10002'],
-			['E', '127.0.0.1', '10003']]
-
-	print(routerList)
 	return routerList
 
 
@@ -62,8 +58,64 @@ def decodePacket(packet):
 	return destination, message
 
 
+def getDatafromFile(fileName):
+	file = open(fileName, 'r')
+	packet = file.read()
+	return packet
+
+
+def getPortNumber(router1, router2):
+	for key, value in tp.ports.items():
+		if key == router1 + ',' + router2:
+			outputPortNumber = value
+
+	return outputPortNumber
+
+
+
+def write_log(node,source,inport,destination,outport,forward):
+	file = open("log_"+node+".txt","a")
+	print(node,source,inport,destination,outport,forward)
+	file.write("\n")
+	file.write(source+"\t"+str(inport)+"\t"+destination+"\t"+str(outport)+"\t"+"DIJKSTRA"+"\t"+forward+"\n")
+	file.write("--------------------------------------------------------------------------------------------------"+"\n")
+	file.close()
+
+def forwardPacket(destination, data):
+	if destination == routerName:
+	    write_log(routerName, 'NA', port,destination,'NA','NA')
+	    print('Message Recieved')
+
+	else:
+		print('Message Forwarded')
+		nextHop = table.getNextHop(destination)
+		nextIp = getIp(nextHop)
+		nextPort = getPort(nextHop)
+
+		outputPortNumber = getPortNumber(routerName, nextHop)
+		print(outputPortNumber)
+		for i in range(len(addressList)):
+			if addressList[i][1] == outputPortNumber:
+				index = i
+
+		write_log(routerName, senderAddress[0], port,destination,outputPortNumber,nextHop)
+		interfaceList[index].sendto(data, (nextIp,nextPort))
+
+def getBroadcastList(routerName):
+	routerList = tp.routers
+	routerList.remove(routerName)
+	return routerList
+
+def createPacket(destination):
+	data = 'Destination: ' + destination + ', data = Broadcasting'
+	return data
+
+
+
 if __name__ == "__main__":
-	routerName = input('Enter router name: ')
+
+	routerName = sys.argv[1]
+	serviceType = sys.argv[2] # r- Recieving, s - Sending, b - Broadcasting
 	router = Activate(routerName)
 	table = RoutingTable(routerName)
 
@@ -72,30 +124,37 @@ if __name__ == "__main__":
 	ipData = getIpData(routerName)
 	print(ipAddress)
 
-	interface1 = socket.socket(family = socket.AF_INET, type = socket.SOCK_DGRAM)
-	interface1.bind((ipData[0][1], int(ipData[0][2])))
-
-	interface2 = socket.socket(family = socket.AF_INET, type = socket.SOCK_DGRAM)
-	interface2.bind((ipData[1][1], int(ipData[1][2])))
-
-	interface3 = socket.socket(family = socket.AF_INET, type = socket.SOCK_DGRAM)
-	interface3.bind((ipData[2][1], int(ipData[2][2])))
+	interfaceList = []
+	addressList = []
+	for i in range(len(ipData)):
+		interface = socket.socket(family = socket.AF_INET, type = socket.SOCK_DGRAM)
+		address = (ipData[i][1], int(ipData[i][2]))
+		interface.bind(address)
+		interfaceList.append(interface)
+		addressList.append(address)
 
 	inputInterface = socket.socket(family = socket.AF_INET, type = socket.SOCK_DGRAM)
 	inputInterface.bind((ipAddress, port))
 
 
 
-	while True:
-		data = "Destination: C, data = Hello"
-		#data, senderAddress = inputInterface.recvfrom(4096)
+	if serviceType == 's':
+		data = getDatafromFile('Packet.txt')
 		destination, message = decodePacket(data)
+		senderAddress = ipAddress
+		forwardPacket(destination, data.encode())
 
-		if destination == routerName:
-			break
+	elif serviceType == 'r':
+		while True:
+			data, senderAddress = inputInterface.recvfrom(4096)
+			destination, message = decodePacket(data.decode())
 
-		nextHop = table.getNextHop(destination)
-		print(destination, nextHop, message)
-		nextIp = getIp(nextHop)
-		nextPort = getPort(nextHop)
-		interface1.sendto(data.encode(), (nextIp,nextPort))
+			forwardPacket(destination, data)
+
+	elif serviceType == 'b':
+		destinationList = getBroadcastList(routerName)
+
+		for destination in destinationList:
+			senderAddress = ipAddress
+			data = createPacket(destination)
+			forwardPacket(destination, data.encode())
